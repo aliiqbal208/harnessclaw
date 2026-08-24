@@ -1124,6 +1124,48 @@ function getConversationLabel(t: (key: string) => string, title = '', firstMessa
   return raw.length > 24 ? `${raw.slice(0, 24)}...` : raw
 }
 
+// MCP-backed tools reach the client as `mcp__<server>__<tool>` — the
+// namespacing the engine applies so two servers exposing a `search` tool
+// cannot shadow each other. The generic underscore fallback at the bottom
+// of getToolDisplayName renders that as "mcp  filesystem  read file":
+// doubled spaces from the `__` separator, the prefix as noise, and no
+// indication of which server the call actually went to.
+//
+// Parsing the shape instead lets the server read as provenance and the
+// tool as an action, which is the part a user is deciding about when a
+// permission prompt appears.
+const MCP_TOOL_PREFIX = 'mcp__'
+const MCP_NAME_SEPARATOR = '__'
+
+/**
+ * Splits `mcp__<server>__<tool>` into its parts, or returns null when the
+ * name is not an MCP tool or is malformed (missing server or tool).
+ * Callers fall through to the generic humanizer on null rather than
+ * rendering a half-empty label.
+ *
+ * Known limitation: a server whose own name contains `__` mis-splits,
+ * because the first separator is taken as the boundary. The engine does
+ * not currently reject such names; guarding there is the real fix.
+ */
+function parseMcpToolName(name: string): { server: string; tool: string } | null {
+  if (!name.startsWith(MCP_TOOL_PREFIX)) return null
+
+  const rest = name.slice(MCP_TOOL_PREFIX.length)
+  const separatorAt = rest.indexOf(MCP_NAME_SEPARATOR)
+  // <= 0 covers both "no separator" and "empty server name".
+  if (separatorAt <= 0) return null
+
+  const server = rest.slice(0, separatorAt)
+  const tool = rest.slice(separatorAt + MCP_NAME_SEPARATOR.length)
+  if (!tool) return null
+
+  return { server, tool }
+}
+
+function humanizeToolName(name: string): string {
+  return name.replace(/_/g, ' ')
+}
+
 function getToolDisplayName(t: (key: string) => string, name?: string): string {
   const toolLabels: Record<string, string> = {
     Bash: t('chat.tools.Bash'),
@@ -1151,7 +1193,14 @@ function getToolDisplayName(t: (key: string) => string, name?: string): string {
   }
 
   if (!name) return t('chat.defaultToolName')
-  return toolLabels[name] || name.replace(/_/g, ' ')
+
+  const known = toolLabels[name]
+  if (known) return known
+
+  const mcp = parseMcpToolName(name)
+  if (mcp) return `${mcp.server} · ${humanizeToolName(mcp.tool)}`
+
+  return humanizeToolName(name)
 }
 
 function getPermissionOptionLabel(t: (key: string) => string, label: string): string {

@@ -13,7 +13,6 @@ challenge-and-connect.json
 *.local
 
 # Editor
-.vscode/*
 !.vscode/extensions.json
 .idea/
 *.swp
@@ -25,8 +24,6 @@ challenge-and-connect.json
 Thumbs.db
 
 # Environment
-.env
-.env.*
 !.env.example
 
 # TypeScript build info
@@ -59,3 +56,4 @@ test_report.json
 
 # 本地工作笔记（不入库）
 docs/feature-new_ui-tasks.md
+config.bat
